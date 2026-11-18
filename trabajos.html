@@ -21,7 +21,7 @@ button{min-height:44px;cursor:pointer;font-weight:600}button:hover{background:#e
 <label>Fecha de visita<input required type="date"></label>
 <label>Estado<select><option>Consulta</option><option>Visita</option><option>Presupuestado</option><option>En curso</option><option>Terminado</option></select></label>
 <label>Presupuesto (ARS)<input required type="number" step="any" min="0"></label>
-<label>Cobrado (ARS)<input required type="number" step="any" min="0"></label><div class="actions"><button>Guardar</button><button type="button" id="cancel" hidden>Cancelar edición</button></div></form><p id="status" role="status"></p><div class="toolbar"><h2>Trabajos desde presupuestos</h2><div id="linked"></div></div><div class="toolbar" id="history"><h2>Trabajos guardados</h2><label>Buscar un registro<input id="search" type="search"></label></div><p id="empty"></p><section></section></main><script>
+<label>Cobrado (ARS)<input required type="number" step="any" min="0"></label><div class="actions"><button>Guardar</button><button type="button" id="cancel" hidden>Cancelar edición</button></div></form><p id="status" role="status"></p><div class="toolbar"><h2>Trabajos desde presupuestos</h2><label>Mostrar trabajos aceptados<select id="job-filter"><option value="">Todos</option><option>Sin visita</option><option>Visitas de hoy</option><option>Con saldo</option><option>Terminados</option></select></label><div id="linked"></div></div><div class="toolbar" id="history"><h2>Trabajos guardados</h2><label>Buscar un registro<input id="search" type="search"></label></div><p id="empty"></p><section></section></main><script>
 const key='gestor-de-trabajos-v1';
 const form=document.querySelector('form');
 const controls=[...form.querySelectorAll('input,select')];
@@ -122,7 +122,14 @@ function renderLinked(){
     }catch(e){renderLinked();statusText.textContent=e.message;statusText.scrollIntoView()}
   }
   const node=(tag,content)=>{const el=document.createElement(tag);el.textContent=content;return el};
-  for(const q of quotes.slice().reverse()){
+  const filter=document.querySelector('#job-filter').value;
+  const today=new Date().toLocaleDateString('sv-SE');
+  const ordered=quotes.slice().sort((a,b)=>(a.job.visit||'9999').localeCompare(b.job.visit||'9999')||b.id-a.id);
+  for(const q of ordered){
+    if(filter==='Sin visita'&&(q.job.visit||q.job.done))continue;
+    if(filter==='Visitas de hoy'&&(q.job.visit!==today||q.job.done))continue;
+    if(filter==='Con saldo'&&paid(q.job)>=quoteTotal(q))continue;
+    if(filter==='Terminados'&&!q.job.done)continue;
     const ref='MC-'+String(q.id).padStart(5,'0');
     if(key==='control-gastos-ingresos-v1'){
       for(const payment of q.job.payments){
@@ -140,6 +147,9 @@ function renderLinked(){
     visitForm.append(visitLabel,node('button','Guardar visita'));
     visitForm.onsubmit=e=>{e.preventDefault();update(q.id,entry=>entry.job.visit=visit.value)};
     card.append(visitForm);
+    const finish=node('button',q.job.done?'Reabrir trabajo':'Marcar terminado');
+    finish.onclick=()=>update(q.id,entry=>entry.job.done=!entry.job.done);
+    card.append(node('p',q.job.done?'Trabajo terminado':'Trabajo en curso'),finish);
     if(paid(q.job)<quoteTotal(q)){
       const f=node('form',''),[al,amount]=input('Seña o cobro (ARS)','number',''),[dl,date]=input('Fecha de cobro','date',new Date().toLocaleDateString('sv-SE'));
       amount.step='.01';amount.min='.01';amount.max=String((quoteTotal(q)-paid(q.job))/100);
@@ -150,8 +160,9 @@ function renderLinked(){
     for(const p of q.job.payments)card.append(node('p',p.date+' · Cobro '+money(p.cents/100)));
     box.append(card);
   }
-  if(!box.childElementCount)box.append(node('p',key=== 'control-gastos-ingresos-v1'?'Todavía no hay cobros de trabajos.':'Todavía no hay presupuestos aceptados.'));
+  if(!box.childElementCount)box.append(node('p',key=== 'control-gastos-ingresos-v1'?'Todavía no hay cobros de trabajos.':'No hay trabajos para esta selección.'));
 }
+document.querySelector('#job-filter').onchange=renderLinked;
 renderLinked();
 window.addEventListener('storage',event=>{if(event.key===quotesKey)renderLinked()});
 </script></html>
