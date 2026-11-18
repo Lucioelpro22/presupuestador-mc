@@ -1,11 +1,19 @@
 <!doctype html><html lang="es-AR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Presupuestador MC</title><style>
 *{box-sizing:border-box}body{font:16px Inter,system-ui;color:#18352f;background:#f2f4ec;max-width:800px;margin:auto;padding:24px}h1{font-size:clamp(32px,7vw,56px);letter-spacing:-.06em}form,article{background:white;padding:22px;border-radius:12px;margin-bottom:14px}form{display:grid;gap:14px}label{display:grid;gap:4px}input,select,button{font:inherit;padding:10px;border:1px solid #9daea7;border-radius:6px}button{background:#195343;color:white;cursor:pointer}p{white-space:pre-wrap}article button{margin-right:8px}@media print{form,button,#status,article:not(.print){display:none}body{background:white}}
+
+body{max-width:960px;background:#f5f6f4}
+h1{border-bottom:3px solid #195343;padding-bottom:18px}
+form,article{border:1px solid #d8ded9;box-shadow:0 2px 6px #18352f09}
+form{grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));align-items:end}
+button{min-height:44px}article p{line-height:1.65;font-variant-numeric:tabular-nums}
+#search{width:100%;margin-bottom:14px}button:focus-visible,input:focus-visible{outline:3px solid #db9738}
+@media print{.toolbar,#empty,h2{display:none}article{box-shadow:none;border:0}h1{font-size:25pt}}
 </style><main><h1>Presupuestador MC</h1><form><label>Cliente<input required maxlength="160"></label>
 <label>Trabajo<input required maxlength="160"></label>
 <label>Materiales (ARS)<input required type="number" step="any" min="0"></label>
 <label>Mano de obra (ARS)<input required type="number" step="any" min="0"></label>
 <label>Traslado (ARS)<input required type="number" step="any" min="0"></label>
-<label>Recargo sobre costos (%)<input required type="number" step="any" min="0"></label><button>Guardar</button></form><p id="status" role="status"></p><section></section></main><script>
+<label>Recargo sobre costos (%)<input required type="number" step="any" min="0"></label><button>Guardar</button><button type="button" id="cancel" hidden>Cancelar edición</button></form><p id="status" role="status"></p><div class="toolbar"><h2>Registros guardados</h2><label>Buscar un registro<input id="search" type="search"></label></div><p id="empty"></p><section></section></main><script>
 const key='presupuestador-mc-v1';
 const form=document.querySelector('form');
 const controls=[...form.querySelectorAll('input,select')];
@@ -16,11 +24,22 @@ let rows=JSON.parse(localStorage.getItem(key)||'[]');
 let editing=-1;
 function describe(v){
   const n=i=>Number(v[i]);
-  const total=(n(2)+n(3)+n(4))*(1+n(5)/100); return [v[0],v[1], 'Total presupuestado '+money(total)].join('\n')
+  const total=(n(2)+n(3)+n(4))*(1+n(5)/100); return ['Presupuesto para '+v[0], 'Trabajo: '+v[1], 'Materiales, mano de obra y traslado incluidos.', 'Total presupuestado '+money(total)].join('\n')
 }
+const cancel=document.querySelector('#cancel');
+function resetForm(){
+  editing=-1;
+  form.reset();
+  cancel.hidden=true;
+  form.querySelector('button').textContent='Guardar';
+}
+cancel.onclick=resetForm;
+const search=document.querySelector('#search');
+search.addEventListener('input',render);
 function render(){
   list.replaceChildren();
   rows.forEach((row,index)=>{
+    if(!row.join(' ').toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase())) return;
     const card=document.createElement('article');
     const summary=document.createElement('p');
     summary.textContent=describe(row);
@@ -31,6 +50,8 @@ function render(){
       button.onclick=()=>{
         if(label==='Editar'){
           editing=index;
+          cancel.hidden=false;
+          form.querySelector('button').textContent='Guardar cambios';
           controls.forEach((input,i)=>input.value=row[i]);
           controls[0].focus();
         }else{
@@ -43,18 +64,21 @@ function render(){
     }
     list.prepend(card);
   });
+  document.querySelector('#empty').textContent=list.childElementCount ? '' :
+    (rows.length ? 'No hay coincidencias.' : 'Todavía no hay registros guardados.');
 }
 form.onsubmit=event=>{
   event.preventDefault();
   const row=controls.map(input=>input.value.trim());
   try{
+    if(row.some(value=>value==='')) throw Error('Completá todos los campos.');
     describe(row);
     const updated=rows.slice();
     updated[editing<0?updated.length:editing]=row;
     localStorage.setItem(key,JSON.stringify(updated));
     rows=updated;
-    editing=-1;
-    form.reset();
+    resetForm();
+    search.value='';
     render();
     statusText.textContent='Guardado en este navegador.';
   }catch(error){statusText.textContent=error.message}
