@@ -1,0 +1,113 @@
+<!doctype html><html lang="es-AR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ébano · Cortes y costos</title><style>
+:root{color-scheme:light;--ink:#202827;--accent:#105e53;--line:#d5dcd7;--paper:#fff;--ground:#f6f7f4}
+*{box-sizing:border-box}body{margin:0;background:var(--ground);color:var(--ink);font:16px/1.5 Inter,system-ui,sans-serif}
+main{max-width:960px;margin:auto;padding:28px clamp(16px,4vw,44px) 64px}
+header,.actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}header{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:24px}
+.mark{display:grid;place-items:center;width:44px;height:44px;background:var(--accent);color:white;font-weight:800;border-radius:9px}
+h1,h2,h3{letter-spacing:-.035em;line-height:1.2}h1{margin:0;font-size:clamp(1.35rem,4vw,1.9rem)}header a{margin-left:auto}a{color:var(--accent);text-underline-offset:4px}
+form,.panel,article{border:1px solid var(--line);border-radius:14px;background:var(--paper);padding:clamp(18px,3vw,30px)}
+form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}form h2,form .actions{grid-column:1/-1}
+h2{font-size:1.22rem;margin:0 0 8px}h3{margin:0 0 8px}label{display:grid;gap:6px;font-size:.9rem;color:#475650;font-weight:600}
+input,select,button{max-width:100%;min-width:0;padding:10px 12px;border:1px solid #aab8b1;border-radius:7px;background:white;color:var(--ink);font:inherit;font-size:1rem}
+button{min-height:44px;cursor:pointer;font-weight:600}button:hover{background:#edf5f1}form button:first-of-type,.primary{background:var(--accent);color:white}
+:focus-visible{outline:3px solid #278779;outline-offset:2px}[hidden]{display:none!important}
+.toolbar{margin:30px 0 16px}.toolbar h2{margin-bottom:12px}article{margin:12px 0;overflow-wrap:anywhere}article p{white-space:pre-wrap}
+.amount{display:block;color:var(--accent);font-size:clamp(1.25rem,4vw,1.65rem);font-variant-numeric:tabular-nums;padding:12px 0;border-top:1px solid var(--line);margin-top:14px}article button{margin:6px 8px 0 0}#status:empty{display:none}
+@media(max-width:600px){form{grid-template-columns:1fr}header a{margin-left:0}}
+@page{size:A4;margin:16mm}
+@media print{body{background:white}main{max-width:none;padding:0}form,button,.toolbar,#empty,#status,header a,article:not(.print){display:none!important}article{border:0;padding:0}.mark{background:white;color:var(--ink);border:1px solid currentColor}}
+</style><main><header><span class="mark" aria-hidden="true">É</span><h1>Ébano · Cortes y costos</h1><a href="#history">Ver guardados</a><a href="index.html">Volver a MC</a></header><form><h2>Medidas y costos del módulo</h2><label>Módulo<input required maxlength="160"></label>
+<label>Ancho exterior (mm)<input required type="number" step="any" min="0"></label>
+<label>Alto exterior (mm)<input required type="number" step="any" min="0"></label>
+<label>Profundidad (mm)<input required type="number" step="any" min="0"></label>
+<label>Espesor (mm)<input required type="number" step="any" min="0"></label>
+<label>Precio por m² (ARS)<input required type="number" step="any" min="0"></label>
+<label>Tapacanto por metro (ARS)<input required type="number" step="any" min="0"></label>
+<label>Herrajes (ARS)<input required type="number" step="any" min="0"></label><label>Módulos iguales<input type="number" value="1" min="1" max="1000" step="1" required></label><label>Merma de compra (%)<input type="number" value="0" min="0" max="100" step=".1" required></label><div class="actions"><button>Guardar</button><button type="button" id="cancel" hidden>Cancelar edición</button></div></form><p id="status" role="status"></p><div class="toolbar" id="history"><h2>Módulos guardados</h2><label>Buscar un registro<input id="search" type="search"></label></div><p id="empty"></p><section></section></main><script>
+const key='ebano-cortes-y-costos-v1';
+const form=document.querySelector('form');
+const controls=[...form.querySelectorAll('input,select')];
+const list=document.querySelector('section');
+const statusText=document.querySelector('#status');
+const money=value=>value.toLocaleString('es-AR',{style:'currency',currency:'ARS'});
+let rows=JSON.parse(localStorage.getItem(key)||'[]');
+let editing=-1;
+function describe(v){
+  const n=i=>Number(v[i]);
+  const ancho=n(1)-2*n(4),alto=n(2),fondo=n(3);
+  if(Math.min(ancho,alto-2*n(4),fondo,n(4))<=0)throw Error('Revisá las medidas del módulo.');
+  const unidades=Number(v[8]??1),merma=Number(v[9]??0);
+  const area=unidades*2*(alto+ancho)*fondo/1e6;
+  const canto=unidades*2*(alto+ancho)/1000;
+  const factor=1+merma/100;
+  return [v[0]+' · '+unidades+' módulo(s)',
+    'Laterales: '+2*unidades+' de '+alto+' × '+fondo+' mm',
+    'Tapa y base: '+2*unidades+' de '+ancho+' × '+fondo+' mm',
+    'Neto: '+area.toFixed(3)+' m² y '+canto.toFixed(2)+' m de canto. Compra con '+merma+'% de merma: '+(area*factor).toFixed(3)+' m² y '+(canto*factor).toFixed(2)+' m de canto.',
+    'Costo estimado sin fondo: '+money((area*n(5)+canto*n(6))*factor+unidades*n(7))];
+}
+const cancel=document.querySelector('#cancel');
+function resetForm(){
+  editing=-1;
+  form.reset();
+  cancel.hidden=true;
+  form.querySelector('button').textContent='Guardar';
+}
+cancel.onclick=resetForm;
+const search=document.querySelector('#search');
+search.addEventListener('input',render);
+function render(){
+  list.replaceChildren();
+  rows.forEach((row,index)=>{
+    if(!row.join(' ').toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase())) return;
+    const card=document.createElement('article');
+    const summary=document.createElement('p');
+    const parts=describe(row);
+    const title=document.createElement('h3');
+    title.textContent=parts[0];
+    summary.textContent=[1, 2, 3].map(i=>parts[i]).join('\n');
+    const amount=document.createElement('strong');
+    amount.className='amount';
+    amount.textContent=parts[parts.length-1];
+    card.append(title,summary,amount);
+    for(const label of ['Editar','Imprimir / PDF']){
+      const button=document.createElement('button');
+      button.textContent=label;
+      button.onclick=()=>{
+        if(label==='Editar'){
+          editing=index;
+          cancel.hidden=false;
+          form.querySelector('button').textContent='Guardar cambios';
+          controls.forEach((input,i)=>input.value=row[i]??input.defaultValue);
+          controls[0].focus();
+        }else{
+          card.classList.add('print');
+          window.print();
+          card.classList.remove('print');
+        }
+      };
+      card.append(button);
+    }
+    list.prepend(card);
+  });
+  document.querySelector('#empty').textContent=list.childElementCount ? '' :
+    (rows.length ? 'No hay coincidencias.' : 'Todavía no hay registros guardados.');
+}
+form.onsubmit=event=>{
+  event.preventDefault();
+  const row=controls.map(input=>input.value.trim());
+  try{
+    if(row.some(value=>value==='')) throw Error('Completá todos los campos.');
+    describe(row);
+    const updated=rows.slice();
+    updated[editing<0?updated.length:editing]=row;
+    localStorage.setItem(key,JSON.stringify(updated));
+    rows=updated;
+    resetForm();
+    search.value='';
+    render();
+    statusText.textContent='Guardado en este navegador.';
+  }catch(error){statusText.textContent=error.message}
+};
+render();
+</script></html>
