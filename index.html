@@ -42,7 +42,7 @@ td,th{text-align:left;border-bottom:1px solid var(--line);padding:8px 4px}th{fon
 @page{size:A4;margin:16mm}
 @media print{body{background:white}main{max-width:none;padding:0}main>:not(#preview),#preview>.actions{display:none!important}#preview{margin:0}#sheet{max-width:none;margin:0;border:0;padding:0}#sheet h2{break-after:avoid}tr,.brand,.total{break-inside:avoid}.mark{background:white;color:var(--ink);border:1px solid currentColor}.total strong{color:var(--ink)}}
 </style>
-<main><header><div class="brand"><span class="mark" aria-hidden="true">MC</span><h1>Presupuestador MC</h1></div><nav class="actions"><a href="#history">Presupuestos</a><a href="trabajos.html">Trabajos</a><a href="caja.html">Caja</a></nav></header>
+<main><header><div class="brand"><span class="mark" aria-hidden="true">MC</span><h1>Presupuestador MC</h1></div><nav class="actions"><a href="#history">Presupuestos</a><a href="trabajos.html">Trabajos</a><a href="caja.html">Caja</a><a href="ebano.html">Ébano</a><a href="shopify.html">Shopify</a></nav></header>
 <form id="editor">
 <div class="panel"><h2>Datos del presupuesto</h2><div class="grid">
 <label>Cliente<input name="client" required maxlength="160"></label><label>Fecha de emisión<input name="date" type="date" required></label>
@@ -58,7 +58,7 @@ td,th{text-align:left;border-bottom:1px solid var(--line);padding:8px 4px}th{fon
 <output id="numbers" aria-live="polite"></output></div>
 <div class="actions"><button class="primary" id="save">Guardar y ver presupuesto</button><button type="button" id="cancel" hidden>Cancelar edición</button></div></form>
 <p role="status" id="status"></p>
-<div class="panel" id="history"><h2>Presupuestos guardados</h2><label>Buscar por número, cliente o trabajo<input type="search" id="search"></label><div id="records"></div></div>
+<div class="panel" id="history"><h2>Presupuestos guardados</h2><label>Buscar por número, cliente o trabajo<input type="search" id="search"></label><label>Estado<select id="quote-filter"><option value="">Todos</option><option>Vigente</option><option>Vencido</option><option>Aceptado</option><option>Sin vigencia</option></select></label><div id="records"></div></div>
 <details class="panel"><summary>Copia de seguridad</summary><p>Incluye presupuestos, trabajos y caja de este navegador. El archivo contiene los datos de tus clientes. Restaurá en un navegador sin registros.</p><button id="backup">Descargar copia</button><label>Restaurar copia JSON<input type="file" accept=".json" id="restore"></label></details><section id="preview" hidden><div class="actions"><button id="print" class="primary">Imprimir / Guardar PDF</button><button id="convert">Aceptar y convertir en trabajo</button><button id="close">Cerrar vista del cliente</button></div><article id="sheet"></article></section>
 </main>
 <template id="material"><div class="item">
@@ -165,15 +165,26 @@ function show(q){
   if(q.terms)sheet.append(element('h2','Condiciones de pago'),element('p',q.terms));
   $('preview').hidden=false;$('preview').scrollIntoView({block:'start'});
 }
+function quoteState(q){
+  if(q.job)return 'Aceptado';
+  if(!q.date||!Number(q.days))return 'Sin vigencia';
+  const expires=new Date(q.date+'T12:00:00');
+  expires.setDate(expires.getDate()+Number(q.days));
+  return today()>expires.toLocaleDateString('sv-SE')?'Vencido':'Vigente';
+}
+$('quote-filter').onchange=list;
 function list(){
   const records=$('records');records.replaceChildren();
   const query=$('search').value.trim().toLowerCase();
+  const filter=$('quote-filter').value;
   for(const q of [...saved].reverse()){
+    const state=quoteState(q);
+    if(filter&&state!==filter)continue;
     if(![number(q.id),q.client,q.work].join(' ').toLowerCase().includes(query))continue;
     const card=element('div','');card.className='record';
     const buttons=element('div','');buttons.className='actions';
-    buttons.append(action('Ver presupuesto',()=>show(q)),...(q.job?[]:[action('Editar',()=>edit(q))]),action(q.job?'Abrir trabajo':'Aceptar y convertir en trabajo',()=>acceptQuote(q.id)));
-    card.append(element('p',number(q.id)+' · '+q.client+' · '+pesos(totals(q).total)),buttons);records.append(card);
+    buttons.append(action('Ver presupuesto',()=>show(q)),action('Duplicar',()=>{edit({...q,id:null,date:today()});$('save').textContent='Guardar como nuevo presupuesto';}),...(q.job?[]:[action('Editar',()=>edit(q))]),action(q.job?'Abrir trabajo':'Aceptar y convertir en trabajo',()=>acceptQuote(q.id)));
+    card.append(element('p',number(q.id)+' · '+q.client+' · '+pesos(totals(q).total)+' · '+state),buttons);records.append(card);
   }
   if(!records.childElementCount)records.append(element('p',saved.length?'Sin coincidencias.':'Todavía no hay presupuestos guardados.'));
 }
@@ -197,7 +208,7 @@ form.onsubmit=async event=>{
     q.id=editing??saved.reduce((max,r)=>Math.max(max,r.id),0)+1;
     const next=editing===null?[...saved,q]:saved.map(r=>r.id===editing?q:r);
     const version=JSON.stringify(next);localStorage.setItem(key,version);
-    loadedVersion=version;saved=next;reset();$('search').value='';list();notify('Guardado en este navegador.');show(q);
+    loadedVersion=version;saved=next;reset();$('search').value='';$('quote-filter').value='';list();notify('Guardado en este navegador.');show(q);
   }catch(e){notify(e.name==='QuotaExceededError'?'Sin espacio para guardar. Probá con un logo más chico.':e.message)}
   finally{$('save').disabled=false}
 };
