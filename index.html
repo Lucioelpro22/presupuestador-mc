@@ -1,0 +1,63 @@
+<!doctype html><html lang="es-AR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Presupuestador MC</title><style>
+*{box-sizing:border-box}body{font:16px Inter,system-ui;color:#18352f;background:#f2f4ec;max-width:800px;margin:auto;padding:24px}h1{font-size:clamp(32px,7vw,56px);letter-spacing:-.06em}form,article{background:white;padding:22px;border-radius:12px;margin-bottom:14px}form{display:grid;gap:14px}label{display:grid;gap:4px}input,select,button{font:inherit;padding:10px;border:1px solid #9daea7;border-radius:6px}button{background:#195343;color:white;cursor:pointer}p{white-space:pre-wrap}article button{margin-right:8px}@media print{form,button,#status,article:not(.print){display:none}body{background:white}}
+</style><main><h1>Presupuestador MC</h1><form><label>Cliente<input required maxlength="160"></label>
+<label>Trabajo<input required maxlength="160"></label>
+<label>Materiales (ARS)<input required type="number" step="any" min="0"></label>
+<label>Mano de obra (ARS)<input required type="number" step="any" min="0"></label>
+<label>Traslado (ARS)<input required type="number" step="any" min="0"></label>
+<label>Recargo sobre costos (%)<input required type="number" step="any" min="0"></label><button>Guardar</button></form><p id="status" role="status"></p><section></section></main><script>
+const key='presupuestador-mc-v1';
+const form=document.querySelector('form');
+const controls=[...form.querySelectorAll('input,select')];
+const list=document.querySelector('section');
+const statusText=document.querySelector('#status');
+const money=value=>value.toLocaleString('es-AR',{style:'currency',currency:'ARS'});
+let rows=JSON.parse(localStorage.getItem(key)||'[]');
+let editing=-1;
+function describe(v){
+  const n=i=>Number(v[i]);
+  const total=(n(2)+n(3)+n(4))*(1+n(5)/100); return [v[0],v[1], 'Total presupuestado '+money(total)].join('\n')
+}
+function render(){
+  list.replaceChildren();
+  rows.forEach((row,index)=>{
+    const card=document.createElement('article');
+    const summary=document.createElement('p');
+    summary.textContent=describe(row);
+    card.append(summary);
+    for(const label of ['Editar','Imprimir / PDF']){
+      const button=document.createElement('button');
+      button.textContent=label;
+      button.onclick=()=>{
+        if(label==='Editar'){
+          editing=index;
+          controls.forEach((input,i)=>input.value=row[i]);
+          controls[0].focus();
+        }else{
+          card.classList.add('print');
+          window.print();
+          card.classList.remove('print');
+        }
+      };
+      card.append(button);
+    }
+    list.prepend(card);
+  });
+}
+form.onsubmit=event=>{
+  event.preventDefault();
+  const row=controls.map(input=>input.value.trim());
+  try{
+    describe(row);
+    const updated=rows.slice();
+    updated[editing<0?updated.length:editing]=row;
+    localStorage.setItem(key,JSON.stringify(updated));
+    rows=updated;
+    editing=-1;
+    form.reset();
+    render();
+    statusText.textContent='Guardado en este navegador.';
+  }catch(error){statusText.textContent=error.message}
+};
+render();
+</script></html>
