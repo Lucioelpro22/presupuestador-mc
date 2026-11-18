@@ -21,7 +21,7 @@ button{min-height:44px;cursor:pointer;font-weight:600}button:hover{background:#e
 <label>Concepto<input required maxlength="160"></label>
 <label>Fecha<input required type="date"></label>
 <label>Movimiento<select><option>Ingreso</option><option>Gasto</option></select></label>
-<label>Importe (ARS)<input required type="number" step="any" min="0"></label><div class="actions"><button>Guardar</button><button type="button" id="cancel" hidden>Cancelar edición</button></div></form><p id="status" role="status"></p><div class="toolbar"><h2>Ingresos por trabajos</h2><div id="linked"></div></div><div class="toolbar" id="history"><h2>Movimientos guardados</h2><label>Buscar un registro<input id="search" type="search"></label></div><p id="empty"></p><section></section></main><script>
+<label>Importe (ARS)<input required type="number" step="any" min="0"></label><div class="actions"><button>Guardar</button><button type="button" id="cancel" hidden>Cancelar edición</button></div></form><p id="status" role="status"></p><div class="toolbar"><h2>Ingresos por trabajos</h2><label>Mes del resumen<input id="month" type="month"></label><label>Ámbito del resumen<select id="scope"><option>Todos</option><option>Emprendimiento</option><option>Casa</option></select></label><p id="balance" role="status"></p><div id="linked"></div></div><div class="toolbar" id="history"><h2>Movimientos guardados</h2><label>Buscar un registro<input id="search" type="search"></label></div><p id="empty"></p><section></section></main><script>
 const key='control-gastos-ingresos-v1';
 const form=document.querySelector('form');
 const controls=[...form.querySelectorAll('input,select')];
@@ -90,7 +90,7 @@ form.onsubmit=event=>{
     const updated=rows.slice();
     updated[editing<0?updated.length:editing]=row;
     localStorage.setItem(key,JSON.stringify(updated));
-    rows=updated;
+    rows=updated;renderLinked();
     resetForm();
     search.value='';
     render();
@@ -110,10 +110,26 @@ function addPayment(q,amount,date){
   if(!Number.isSafeInteger(cents)||cents<=0||!date||cents>quoteTotal(q)-paid(q.job))throw Error('Revisá la fecha y el importe. El cobro debe ser mayor que cero y no superar el saldo.');
   q.job.payments.push({date,cents});
 }
+function cashSummary(rows,quotes,month,scope){
+  let income=0,expense=0;
+  for(const [area,,,date,type,amount] of rows){
+    if(!date.startsWith(month)||(scope!=='Todos'&&scope!==area))continue;
+    if(type==='Ingreso')income+=Math.round(Number(amount)*100);
+    else expense+=Math.round(Number(amount)*100);
+  }
+  if(scope!=='Casa')for(const q of quotes)for(const p of q.job.payments){
+    if(p.date.startsWith(month))income+=p.cents;
+  }
+  return {income,expense,balance:income-expense};
+}
 function renderLinked(){
   const box=document.querySelector('#linked');box.replaceChildren();
   const raw=localStorage.getItem(quotesKey);
   const quotes=JSON.parse(raw||'[]').filter(q=>q.job);
+  const month=document.querySelector('#month').value;
+  const scope=document.querySelector('#scope').value;
+  const summary=cashSummary(rows,quotes,month,scope);
+  document.querySelector('#balance').textContent='Ingresos '+money(summary.income/100)+' · Gastos '+money(summary.expense/100)+' · Saldo '+money(summary.balance/100);
   function update(id,change){
     try{
       if(localStorage.getItem(quotesKey)!==raw)throw Error('Los datos cambiaron. Volvé a abrir la ficha.');
@@ -126,6 +142,7 @@ function renderLinked(){
     const ref='MC-'+String(q.id).padStart(5,'0');
     if(key==='control-gastos-ingresos-v1'){
       for(const payment of q.job.payments){
+        if(scope==='Casa'||!payment.date.startsWith(month))continue;
         box.append(node('p',payment.date+' · Emprendimiento · '+ref+' · '+q.client+' · Ingreso '+money(payment.cents/100)));
       }
       continue;
@@ -150,8 +167,11 @@ function renderLinked(){
     for(const p of q.job.payments)card.append(node('p',p.date+' · Cobro '+money(p.cents/100)));
     box.append(card);
   }
-  if(!box.childElementCount)box.append(node('p',key=== 'control-gastos-ingresos-v1'?'Todavía no hay cobros de trabajos.':'Todavía no hay presupuestos aceptados.'));
+  if(!box.childElementCount)box.append(node('p',key=== 'control-gastos-ingresos-v1'?'Sin cobros de trabajos en esta selección.':'Todavía no hay presupuestos aceptados.'));
 }
+document.querySelector('#month').value=new Date().toLocaleDateString('sv-SE').slice(0,7);
+document.querySelector('#month').onchange=renderLinked;
+document.querySelector('#scope').onchange=renderLinked;
 renderLinked();
 window.addEventListener('storage',event=>{if(event.key===quotesKey)renderLinked()});
 </script></html>
