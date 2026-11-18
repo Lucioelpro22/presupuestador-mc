@@ -42,7 +42,7 @@ td,th{text-align:left;border-bottom:1px solid var(--line);padding:8px 4px}th{fon
 @page{size:A4;margin:16mm}
 @media print{body{background:white}main{max-width:none;padding:0}main>:not(#preview),#preview>.actions{display:none!important}#preview{margin:0}#sheet{max-width:none;margin:0;border:0;padding:0}#sheet h2{break-after:avoid}tr,.brand,.total{break-inside:avoid}.mark{background:white;color:var(--ink);border:1px solid currentColor}.total strong{color:var(--ink)}}
 </style>
-<main><header><div class="brand"><span class="mark" aria-hidden="true">MC</span><h1>Presupuestador MC</h1></div><a href="#history">Ver guardados</a></header>
+<main><header><div class="brand"><span class="mark" aria-hidden="true">MC</span><h1>Presupuestador MC</h1></div><nav class="actions"><a href="#history">Presupuestos</a><a href="trabajos.html">Trabajos</a><a href="caja.html">Caja</a></nav></header>
 <form id="editor">
 <div class="panel"><h2>Datos del presupuesto</h2><div class="grid">
 <label>Cliente<input name="client" required maxlength="160"></label><label>Fecha de emisión<input name="date" type="date" required></label>
@@ -59,7 +59,7 @@ td,th{text-align:left;border-bottom:1px solid var(--line);padding:8px 4px}th{fon
 <div class="actions"><button class="primary" id="save">Guardar y ver presupuesto</button><button type="button" id="cancel" hidden>Cancelar edición</button></div></form>
 <p role="status" id="status"></p>
 <div class="panel" id="history"><h2>Presupuestos guardados</h2><label>Buscar por número, cliente o trabajo<input type="search" id="search"></label><div id="records"></div></div>
-<section id="preview" hidden><div class="actions"><button id="print" class="primary">Imprimir / Guardar PDF</button><button id="close">Cerrar vista del cliente</button></div><article id="sheet"></article></section>
+<details class="panel"><summary>Copia de seguridad</summary><p>Incluye presupuestos, trabajos y caja de este navegador. El archivo contiene los datos de tus clientes. Restaurá en un navegador sin registros.</p><button id="backup">Descargar copia</button><label>Restaurar copia JSON<input type="file" accept=".json" id="restore"></label></details><section id="preview" hidden><div class="actions"><button id="print" class="primary">Imprimir / Guardar PDF</button><button id="convert">Aceptar y convertir en trabajo</button><button id="close">Cerrar vista del cliente</button></div><article id="sheet"></article></section>
 </main>
 <template id="material"><div class="item">
 <label>Material<input data-field="name" required maxlength="160"></label>
@@ -136,6 +136,8 @@ function action(label,fn){
   const button=element('button',label);button.onclick=fn;return button;
 }
 function show(q){
+  $('convert').textContent=q.job?'Abrir trabajo':'Aceptar y convertir en trabajo';
+  $('convert').onclick=()=>acceptQuote(q.id);
   const sheet=$('sheet');sheet.replaceChildren();
   const brand=element('div','');brand.className='brand';
   if(q.logo){const img=new Image();img.src=q.logo;img.alt='Logo';brand.append(img)}
@@ -170,7 +172,7 @@ function list(){
     if(![number(q.id),q.client,q.work].join(' ').toLowerCase().includes(query))continue;
     const card=element('div','');card.className='record';
     const buttons=element('div','');buttons.className='actions';
-    buttons.append(action('Ver presupuesto',()=>show(q)),action('Editar',()=>edit(q)));
+    buttons.append(action('Ver presupuesto',()=>show(q)),...(q.job?[]:[action('Editar',()=>edit(q))]),action(q.job?'Abrir trabajo':'Aceptar y convertir en trabajo',()=>acceptQuote(q.id)));
     card.append(element('p',number(q.id)+' · '+q.client+' · '+pesos(totals(q).total)),buttons);records.append(card);
   }
   if(!records.childElementCount)records.append(element('p',saved.length?'Sin coincidencias.':'Todavía no hay presupuestos guardados.'));
@@ -186,6 +188,7 @@ async function readLogo(file){
 form.onsubmit=async event=>{
   event.preventDefault();$('save').disabled=true;
   try{
+    if(editing!==null&&saved.find(entry=>entry.id===editing)?.job)throw Error('Este presupuesto ya fue aceptado.');
     const q=read();
     if(!q.client||!q.work||!q.terms||q.items.some(i=>!i.name||!i.unit))throw Error('Revisá los campos vacíos.');
     if(!Number.isSafeInteger(totals(q).total))throw Error('El total excede el rango admitido.');
@@ -201,5 +204,56 @@ form.onsubmit=async event=>{
 $('add').onclick=()=>addMaterial().querySelector('input').focus();
 form.oninput=refresh;$('search').oninput=list;$('cancel').onclick=reset;
 $('print').onclick=()=>window.print();$('close').onclick=()=>$('preview').hidden=true;
+function persistQuotes(next){
+  if(localStorage.getItem(key)!==loadedVersion)throw Error('Los datos cambiaron en otra pestaña. Recargá la página.');
+  const raw=JSON.stringify(next);
+  localStorage.setItem(key,raw);loadedVersion=raw;saved=next;
+}
+function acceptQuote(id){
+  try{
+    const q=saved.find(entry=>entry.id===id);
+    if(!q.job)persistQuotes(saved.map(entry=>entry.id===id?{...entry,job:{visit:'',payments:[]}}:entry));
+    location.href='trabajos.html#mc-'+id;
+  }catch(error){notify(error.message)}
+}
+const jobKey='gestor-de-trabajos-v1',cashKey='control-gastos-ingresos-v1';
+function exportBackup(){
+  load();
+  const copy={format:'mc-oficios-1',quotes:saved,jobs:JSON.parse(localStorage.getItem(jobKey)||'[]'),cash:JSON.parse(localStorage.getItem(cashKey)||'[]')};
+  const url=URL.createObjectURL(new Blob([JSON.stringify(copy)],{type:'application/json'}));
+  const link=document.createElement('a');link.href=url;link.download='MC-'+today()+'.json';link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+}
+function validateBackup(copy){
+  const text=value=>typeof value==='string';
+  const numeric=value=>(text(value)||typeof value==='number')&&String(value).trim()!==''&&Number.isFinite(Number(value))&&Number(value)>=0;
+  const rows=value=>Array.isArray(value)&&value.every(row=>Array.isArray(row)&&row.length===6&&row.every(text)&&numeric(row[5]));
+  const ids=new Set();
+  if(copy?.format!=='mc-oficios-1'||!rows(copy.jobs)||!rows(copy.cash)||!Array.isArray(copy.quotes))throw Error('Formato de copia inválido.');
+  for(const q of copy.quotes){
+    if(!q||!Number.isSafeInteger(q.id)||q.id<1||ids.has(q.id)||!['client','work','terms','date','logo'].every(k=>text(q[k]))||
+      !(q.logo===''||/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(q.logo))||
+      ![q.travel,q.labor,q.markup].every(numeric)||!Array.isArray(q.items)||
+      !q.items.every(i=>i&&text(i.name)&&text(i.unit)&&numeric(i.price)&&numeric(i.qty))||!Number.isSafeInteger(totals(q).total))throw Error('Presupuesto inválido en la copia.');
+    ids.add(q.id);
+    if(q.job&&(!text(q.job.visit)||!Array.isArray(q.job.payments)||!q.job.payments.every(p=>text(p.date)&&Number.isSafeInteger(p.cents)&&p.cents>0)||
+      q.job.payments.reduce((s,p)=>s+p.cents,0)>totals(q).total))throw Error('Cobros inválidos en la copia.');
+  }
+}
+$('backup').onclick=()=>{try{exportBackup()}catch(e){notify(e.message)}};
+$('restore').onchange=async e=>{
+  const file=e.target.files[0];if(!file)return;
+  try{
+    const copy=JSON.parse(await file.text());validateBackup(copy);load();
+    if(saved.length||[jobKey,cashKey].some(k=>JSON.parse(localStorage.getItem(k)||'[]').length))throw Error('Restaurá en un navegador sin registros para conservar ambos historiales.');
+    const writes=[[jobKey,copy.jobs],[cashKey,copy.cash],[key,copy.quotes]];
+    const old=writes.map(([k])=>localStorage.getItem(k));
+    let written=0;
+    try{for(const [k,v] of writes){localStorage.setItem(k,JSON.stringify(v));written++}}
+    catch(error){for(let i=0;i<written;i++){const k=writes[i][0];if(old[i]===null)localStorage.removeItem(k);else localStorage.setItem(k,old[i])}throw error}
+    load();list();notify('Copia restaurada.');
+  }catch(error){notify(error.message)}finally{e.target.value=''}
+};
+
 try{load();reset();list()}catch{form.querySelectorAll('button').forEach(b=>b.disabled=true);notify('No se pudieron leer los registros locales. Conservá los datos del navegador.')}
 </script></html>
