@@ -1,5 +1,13 @@
 # Presupuestador MC
 
+[Abrir la aplicación](https://lucioelpro22.github.io/presupuestador-mc/)
+
+## Del presupuesto al cobro
+
+Guardá el presupuesto y tocá **Aceptar y convertir en trabajo** cuando lo apruebe el cliente. El importe aceptado queda fijo. En **Trabajos**, elegí la fecha de visita y registrá cada seña o cobro. En **Caja**, los ingresos por trabajos aparecen automáticamente con su fecha y referencia. Volver a abrir un presupuesto aceptado recupera la misma ficha.
+
+En **Copia de seguridad** podés descargar los presupuestos, trabajos y movimientos de este sitio en un JSON. Para trasladarlos a otro dispositivo, abrí la aplicación en un navegador con historial vacío y restaurá ese archivo. Cada navegador mantiene su propia copia. Para usar las tres pantallas desde una descarga, serví la carpeta completa con un servidor estático local.
+
 Presupuestos de gas, plomería y destapaciones en pesos argentinos. Descargá y abrí `index.html` en un navegador con almacenamiento local habilitado. Funciona sin servidor ni instalación.
 
 1. Cargá cliente, alcance, fecha, vigencia y condiciones de pago.
